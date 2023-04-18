@@ -1,0 +1,80 @@
+function onEdit(e) {
+  const src = e.source.getActiveSheet();
+  const r = e.range;
+  sendToAccounting (src,r,e);
+  returnToPartner(src,r,e);
+  accountingComplete(src,r,e);
+  dataImport(src,r,e);
+  dataReset ();
+}
+
+function GetSheetName(){
+  return SpreadsheetApp.getActiveSpreadsheet().getActiveSheet().getName();
+}
+
+function lastValue(column,dest) {
+  var lastRow = dest.getMaxRows();
+  var values = dest.getRange(column + "1:" + column + lastRow).getValues();
+  for (; values[lastRow - 1] == "" && lastRow > 0; lastRow--) {}
+  return lastRow;
+}
+
+function prepDestRow(sendTo,dest){
+  var lastRow = lastValue("B",dest)+1;
+  dest.getRange(lastRow,18,1,1).insertCheckboxes('Yes','No');
+  dest.getRange(lastRow,20,1,1).insertCheckboxes('Yes','No');
+  dest.getRange(lastRow,21,1,1).insertCheckboxes('VOID','Keep');
+  dest.getRange(lastRow,22,1,1).insertCheckboxes(sendTo,'Pending');
+  dest.getRange(lastRow,1,1,1).setValue("New");
+  return;
+}
+
+function sendToAccounting(src,r,e) {
+  if (src.getName() != "PAE Review" || r.columnStart != 22  || r.rowStart == 1 || e.value != "Accounting") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(e.value);
+  var lastRow = lastValue("B",dest)+1;
+  prepDestRow(src.getName(),dest);
+  src.getRange(r.rowStart,2,1,20).copyTo(dest.getRange(lastRow,2,1,20), {contentsOnly:true});
+  src.getRange(r.rowStart,23,1,1).copyTo(dest.getRange(lastRow,23,1,1), {contentsOnly:true});
+  dest.getRange(lastRow,24,1,1).insertCheckboxes('Completed','Pending');
+  src.deleteRow(r.rowStart);
+}
+
+function returnToPartner(src,r,e) {
+  if (src.getName() != "Accounting" || r.columnStart != 22  || r.rowStart == 1 || e.value != "PAE Review") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(e.value);
+  var lastRow = lastValue("B",dest)+1;
+  prepDestRow('Accounting',dest);
+  src.getRange(r.rowStart,2,1,20).copyTo(dest.getRange(lastRow,2,1,20), {contentsOnly:true});
+  src.getRange(r.rowStart,23,1,1).copyTo(dest.getRange(lastRow,23,1,1), {contentsOnly:true});
+  src.deleteRow(r.rowStart); 
+}
+
+function accountingComplete(src,r,e){
+  if (src.getName() != "Accounting" || r.columnStart != 24  || r.rowStart == 1 || e.value != "Completed") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(e.value);
+  var lastRow = lastValue("B",dest)+1;
+  src.getRange(r.rowStart,2,1,20).copyTo(dest.getRange(lastRow,2,1,20));
+  src.getRange(r.rowStart,23,1,1).copyTo(dest.getRange(lastRow,23,1,1));
+  dest.getRange(lastRow,1,1,1).setValue("Completed");
+  dest.getRange(lastRow,22,1,1).setValue("Resolved");
+  src.deleteRow(r.rowStart);
+}
+
+
+function dataImport(src,r,e){
+  var importStatus = src.getRange(r.rowStart,2,1,1).getValue();
+  if (src.getName() != "Import" || r.columnStart != 1 || r.rowStart == 1 || e.value != "Imported" || importStatus != "New") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAE Review");
+  var lastRow = lastValue("B",dest)+1;
+  prepDestRow('Accounting',dest);
+  src.getRange(r.rowStart,3,1,4).copyTo(dest.getRange(lastRow,2,1,4), {contentsOnly:true});
+  src.getRange(r.rowStart,10,1,5).copyTo(dest.getRange(lastRow,9,1,5), {contentsOnly:true});
+  return;
+}
+
+function dataReset (){
+  Utilities.sleep(500)
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Import");
+  dest.getRange(3,1,500,1).setValue("New");
+}

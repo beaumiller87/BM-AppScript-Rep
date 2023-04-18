@@ -1,0 +1,47 @@
+function onEdit(e) {
+  const src = e.source.getActiveSheet();
+  const r = e.range;
+  statusChangeWrong(src,r,e);
+  partnerReview (src,r,e);
+  statusChange (src,r,e);
+  reviewComplete(src,r,e);
+}
+
+function statusChange(src,r,e) {
+  if (r.columnStart != 13 || r.rowStart == 1 || e.value == src.getName() || e.value == "PAE Review" || src.getName() == "PAE Review") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(e.value);
+  src.getRange(r.rowStart,1,1,15).copyTo(dest.getRange(dest.getLastRow()+1,1,1,15), {contentsOnly:true});
+  src.deleteRow(r.rowStart);
+}
+
+function statusChangeWrong(src,r,e) {
+  if (r.columnStart != 13 || r.rowStart == 1 || e.value == src.getName() || e.value != "PAE Review" || src.getName() == "Pending") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Pending");
+  src.getRange(r.rowStart,1,1,15).copyTo(dest.getRange(dest.getLastRow()+1,1,1,15), {contentsOnly:true});
+  dest.getRange(dest.getLastRow(),13,1,1).setValue("Pending");
+  src.deleteRow(r.rowStart);
+}
+
+function lastValue(column,dest) {
+  var lastRow = dest.getMaxRows();
+  var values = dest.getRange(column + "1:" + column + lastRow).getValues();
+  for (; values[lastRow - 1] == "" && lastRow > 0; lastRow--) {}
+  return lastRow;
+}
+
+function partnerReview(src,r,e) {
+  if (r.columnStart != 13 || r.rowStart == 1 || e.value == src.getName() || src.getName() != "Pending" || e.value != "PAE Review") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(e.value);
+  var lastRow = lastValue("C",dest)+1;
+  src.getRange(r.rowStart,1,1,4).copyTo(dest.getRange(lastRow,3,1,4), {contentsOnly:true});
+  src.getRange(r.rowStart,10,1,1).copyTo(dest.getRange(lastRow,7,1,1), {contentsOnly:true});
+  src.getRange(r.rowStart,5,1,5).copyTo(dest.getRange(lastRow,10,1,5), {contentsOnly:true});
+  src.getRange(r.rowStart,15,1,1).copyTo(dest.getRange(lastRow,25,1,1), {contentsOnly:true});
+  dest.getRange(lastRow,1,1,1).insertCheckboxes('Complete','Pending');
+}
+
+function reviewComplete(src,r,e) {
+   if (src.getName() != "PAE Review" || r.columnStart != 1 || r.rowStart == 1 || e.value != "Complete") return;
+   src.deleteRow(r.rowStart);
+}
+

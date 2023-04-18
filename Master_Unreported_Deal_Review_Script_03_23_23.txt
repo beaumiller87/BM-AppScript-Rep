@@ -1,0 +1,177 @@
+function onEdit(e) {
+  const src = e.source.getActiveSheet();
+  const r = e.range;
+  dealValidated (src,r,e);
+  returnToValidation(src, r, e);
+  paeReturn(src,r,e,);
+  paeNoPayment(src,r,e);
+  importReport(src,r,e);
+ }
+
+function openRow(column,dest) {
+  var lastRow = dest.getMaxRows();
+  var values = dest.getRange(column + "1:" + column + lastRow).getValues();
+  for (; values[lastRow - 1] == "" && lastRow > 0; lastRow--) {}
+  return lastRow+1;
+}
+
+function paeFinder(src,r) {
+  var marketSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAE Market List");
+  var paeMarkets = marketSheet.getRange(6,9,92,2).getValues();
+  var market = src.getRange(r.rowStart,17,1,1).getValue();
+
+  var foundMarket = paeMarkets.find(function(paeMarket) {
+    return paeMarket[0] == market;
+  });
+
+  return foundMarket ? foundMarket[1].toString() : market.toString();
+}
+
+function importReport(src, r, e) {
+  if (src.getName() != "Import" || r.columnStart != 3 || r.rowStart != 7 || e.value != "Import") return;
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Validation");
+  var rowLength = openRow("D", src) - 12;
+  var srcData = src.getRange(12, 1, rowLength, 1).getValues();
+  var destData = dest.getRange(1, 1, dest.getLastRow(), 1).getValues();
+  var uniqueData = [];
+  
+  // Check for duplicates and remove from list
+  for (var i = srcData.length - 1; i >= 0; i--) {
+    var duplicate = false;
+    for (var j = 0; j < destData.length; j++) {
+      if (srcData[i][0] == destData[j][0]) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (duplicate) {
+      src.deleteRow(11 + i + 1);
+    } else {
+      uniqueData.unshift(srcData[i]);
+    }
+  }
+  
+  var rowDest = openRow("A", dest);
+  var rowCount = openRow("A",src)-11
+  src.getRange(12,1,rowCount,1).copyTo(dest.getRange(rowDest,1,rowCount,1), {contentsOnly:true});
+  src.getRange(12,3,rowCount,23).copyTo(dest.getRange(rowDest,17,rowCount,23), {contentsOnly:true});
+  
+  src.getRange(11,3,openRow("C",src)-11,23).clearContent();
+  src.getRange(7,3,1,1).setValue("Pending");
+}
+
+function dealValidated(src, r, e) {
+  if (r.columnStart != 2 || r.rowStart != 2 || e.value != "Import" || src.getName() != "Validation") return;
+
+  const dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAE");
+  const dest2 = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Resolved");
+  let destRow = openRow("A", dest);
+
+  // Sort the rows with "Yes" in column 2 in descending order
+  const lastRow = src.getLastRow();
+  const sortRange = src.getRange(5, 2, lastRow - 4, 39);
+  sortRange.sort({column: 2, ascending: false});
+
+  // Copy rows with "Yes" in column 2
+  let firstYesRow = findFirstRow(src, "Yes");
+  let lastYesRow = findLastRow(src, "Yes");
+  src.getRange(firstYesRow, 1, lastYesRow - firstYesRow + 1, 10).copyTo(dest.getRange(destRow, 1, lastYesRow - firstYesRow + 1, 10), {contentsOnly: true});
+  src.getRange(firstYesRow, 14, lastYesRow - firstYesRow + 1, 22).copyTo(dest.getRange(destRow, 14, lastYesRow - firstYesRow + 1, 22), {contentsOnly: true});  
+
+  // Delete the copied rows from the source sheet
+  let numRowsCopied = lastYesRow - firstYesRow;
+  if (numRowsCopied > 0) {
+    src.deleteRows(firstYesRow, lastYesRow - firstYesRow + 1);
+  }
+
+// New "No" movement
+  let firstNoRow = findFirstRow(src, "No -");
+  let lastNoRow = findLastRow(src, "No -");
+  src.getRange(firstNoRow, 1, lastNoRow - firstNoRow + 1, 10).copyTo(dest2.getRange(destRow, 1, lastNoRow - firstNoRow + 1, 10), {contentsOnly: true});
+  src.getRange(firstNoRow, 14, lastNoRow - firstNoRow + 1, 22).copyTo(dest2.getRange(destRow, 14, lastNoRow - firstNoRow + 1, 22), {contentsOnly: true}); 
+
+  let noRowsCopied = lastNoRow - firstNoRow;
+  if (noRowsCopied > 0) {
+    src.deleteRows(firstNoRow, lastNoRow - firstNoRow + 1);
+  }
+
+  src.getRange(2,2,1,1).setValue("Pending");
+}
+
+function findFirstRow(sheet,query) {
+  for (let i = 5; i <= sheet.getLastRow(); i++) {
+    if (sheet.getRange(i, 2).getValue().startsWith(query)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function findLastRow(src, value) {
+  const lastRow = src.getLastRow();
+  for (let i = lastRow; i >= 5; i--) {
+    if (src.getRange(i, 2).getValue().startsWith(value)) {
+      return i;
+        }
+  }
+  return 5;
+}
+
+function paeNoPayment(src, r, e) {
+  if (r.columnStart != 3 || r.rowStart <= 4 || src.getName() != "PAE") return;
+
+  let dest;
+  switch (src.getRange(r.rowStart, 2).getValue()) {
+    case "No - Already reported (same date and side)":
+    case "No - Relationship expired prior to close":
+    case "No - Prior client":
+    case "No - Duplicate result":
+    case "No - Other":
+      dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Resolved");
+      break;
+    default:
+      return;
+  }
+
+  src.getRange(r.rowStart, 1, 1, 39).copyTo(dest.getRange(openRow("A", dest), 1, 1, 39), { contentsOnly: true });
+  src.deleteRow(r.rowStart);
+  dest.getRange(openRow("A", dest) - 1, 40, 1).setValue(src.getName());
+  src.insertRowsAfter(openRow("A", src), 1);
+}
+
+function returnToValidation(src, r, e) {
+  if (r.columnStart != 2 || r.rowStart <= 4 || src.getName() == "Validation") return;
+
+  let dest;
+  switch (src.getRange(r.rowStart, 2).getValue()) {
+    case "Return to Validation":
+      dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Validation");
+      break;
+    default:
+      return
+  }
+
+  src.getRange(r.rowStart, 1, 1, 39).copyTo(dest.getRange(openRow("A", dest), 1, 1, 39), { contentsOnly: true });
+  src.deleteRow(r.rowStart);
+  src.insertRowsAfter(openRow("A", src), 1);
+}
+
+function paeReturn (src, r, e) {
+  if (r.columnStart != 3 || r.rowStart <= 4 || src.getName() == "PAE" || src.getName() == "Validation") return;
+
+  switch (src.getRange(r.rowStart,3).getValue()) {
+    case "Return to PAE":
+      dest = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAE");
+      break;
+    default:
+      return;
+  }
+
+  src.getRange(r.rowStart, 1, 1, 10).copyTo(dest.getRange(openRow("A", dest), 1, 1, 10), { contentsOnly: true });
+  src.getRange(r.rowStart, 14, 1, 22).copyTo(dest.getRange(openRow("A", dest), 14, 1, 22), { contentsOnly: true });
+
+  src.deleteRow(r.rowStart);
+  src.insertRowsAfter(openRow("A", src), 1);
+}
+
+
